@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import { h, ref, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
-
-type TableRow = {
-  id: string
-  message: string
-  date: string
-}
+import { ref } from 'vue'
+import DataTable from '@/components/DataTable.vue'
+import type { TableRow } from '@/components/DataTable.vue'
 
 const leftData = ref<TableRow[]>([
   { id: '1', message: 'First message', date: '2024-01-15T10:00:00' },
@@ -21,60 +16,6 @@ const leftData = ref<TableRow[]>([
 
 const rightData = ref<TableRow[]>([])
 
-const leftTableRef = ref<{ tableApi?: { getColumn: (id: string) => { setFilterValue: (v: string) => void; getFilterValue: () => string } } } | null>(null)
-const rightTableRef = ref<{ tableApi?: { getColumn: (id: string) => { setFilterValue: (v: string) => void; getFilterValue: () => string } } } | null>(null)
-
-const leftGlobalFilter = ref('')
-const rightGlobalFilter = ref('')
-const leftIdFilter = ref('')
-const rightIdFilter = ref('')
-const leftSorting = ref<{ id: string; desc: boolean }[]>([])
-const rightSorting = ref<{ id: string; desc: boolean }[]>([])
-const leftColumnFilters = ref<{ id: string; value: unknown }[]>([])
-const rightColumnFilters = ref<{ id: string; value: unknown }[]>([])
-
-function getSortableHeader(column: { getIsSorted: () => false | 'asc' | 'desc'; toggleSorting: (desc?: boolean) => void; id: string }, label: string) {
-  const UButton = resolveComponent('UButton')
-  const isSorted = column.getIsSorted()
-  return h(
-    UButton,
-    {
-      color: 'neutral',
-      variant: 'ghost',
-      label,
-      icon: isSorted === 'asc' ? 'i-lucide-arrow-up-narrow-wide' : isSorted === 'desc' ? 'i-lucide-arrow-down-wide-narrow' : 'i-lucide-arrow-up-down',
-      class: '-mx-2.5',
-      onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
-    }
-  )
-}
-
-const sortableColumns: TableColumn<TableRow>[] = [
-  {
-    accessorKey: 'id',
-    header: ({ column }) => getSortableHeader(column, 'ID'),
-    cell: ({ row }) => String(row.getValue('id')),
-  },
-  {
-    accessorKey: 'message',
-    header: ({ column }) => getSortableHeader(column, 'Message'),
-    cell: ({ row }) => row.getValue('message') as string,
-  },
-  {
-    accessorKey: 'date',
-    header: ({ column }) => getSortableHeader(column, 'Date'),
-    cell: ({ row }) =>
-      new Date(row.getValue('date') as string).toLocaleString('en-US', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }),
-  },
-]
-
 function onLeftSelect(_e: Event, row: { original: TableRow }) {
   const item = row.original
   leftData.value = leftData.value.filter((r) => r.id !== item.id)
@@ -86,75 +27,22 @@ function onRightSelect(_e: Event, row: { original: TableRow }) {
   rightData.value = rightData.value.filter((r) => r.id !== item.id)
   leftData.value = [...leftData.value, { ...item }]
 }
-
-function syncLeftIdFilter(value: string) {
-  leftIdFilter.value = value
-  leftTableRef.value?.tableApi?.getColumn('id')?.setFilterValue(value)
-}
-
-function syncRightIdFilter(value: string) {
-  rightIdFilter.value = value
-  rightTableRef.value?.tableApi?.getColumn('id')?.setFilterValue(value)
-}
 </script>
 
 <template>
   <UApp>
     <div class="flex h-screen w-full gap-4 p-4">
-      <!-- Left container -->
-      <div class="flex flex-1 flex-col gap-3 rounded-lg border border-default bg-default p-4">
-        <h2 class="text-lg font-semibold">Исходная таблица</h2>
-        <div class="flex flex-wrap items-center gap-3 border-b border-accented pb-3">
-          <UInput
-            v-model="leftGlobalFilter"
-            class="max-w-xs"
-            placeholder="Поиск..."
-            icon="i-lucide-search"
-          />
-          <UInput
-            :model-value="leftIdFilter"
-            class="max-w-[120px]"
-            placeholder="Фильтр по ID"
-            @update:model-value="syncLeftIdFilter"
-          />
-        </div>
-        <UTable
-          ref="leftTableRef"
-          v-model:global-filter="leftGlobalFilter"
-          v-model:sorting="leftSorting"
-          v-model:column-filters="leftColumnFilters"
+      <div class="flex flex-1 flex-col rounded-lg border border-default bg-default p-4">
+        <DataTable
           :data="leftData"
-          :columns="sortableColumns"
-          class="flex-1 cursor-pointer"
+          title="Исходная таблица"
           @select="onLeftSelect"
         />
       </div>
-
-      <!-- Right container -->
-      <div class="flex flex-1 flex-col gap-3 rounded-lg border border-default bg-default p-4">
-        <h2 class="text-lg font-semibold">Перенесённые строки</h2>
-        <div class="flex flex-wrap items-center gap-3 border-b border-accented pb-3">
-          <UInput
-            v-model="rightGlobalFilter"
-            class="max-w-xs"
-            placeholder="Поиск..."
-            icon="i-lucide-search"
-          />
-          <UInput
-            :model-value="rightIdFilter"
-            class="max-w-[120px]"
-            placeholder="Фильтр по ID"
-            @update:model-value="syncRightIdFilter"
-          />
-        </div>
-        <UTable
-          ref="rightTableRef"
-          v-model:global-filter="rightGlobalFilter"
-          v-model:sorting="rightSorting"
-          v-model:column-filters="rightColumnFilters"
+      <div class="flex flex-1 flex-col rounded-lg border border-default bg-default p-4">
+        <DataTable
           :data="rightData"
-          :columns="sortableColumns"
-          class="flex-1 cursor-pointer"
+          title="Перенесённые строки"
           @select="onRightSelect"
         />
       </div>
