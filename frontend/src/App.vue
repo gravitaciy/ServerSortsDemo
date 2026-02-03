@@ -41,8 +41,9 @@ function onRightSelect(_e: Event, row: { original: TableRow }) {
       </div>
       <div class="flex flex-1 flex-col rounded-lg border border-default bg-default p-4">
         <DataTable
-          :data="rightData"
+          v-model:data="rightData"
           title="Перенесённые строки"
+          draggable
           @select="onRightSelect"
         />
       </div>
