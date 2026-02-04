@@ -16,6 +16,26 @@ const leftData = ref<TableRow[]>([
 
 const rightData = ref<TableRow[]>([])
 
+const newId = ref('')
+const newMessage = ref('')
+const newDate = ref('')
+
+function addLeftRecord() {
+  const id = newId.value.trim()
+  const message = newMessage.value.trim()
+  let date = newDate.value.trim()
+  if (!id || !message) return
+  if (!date) {
+    date = new Date().toISOString().slice(0, 19)
+  } else if (date.length === 16) {
+    date = `${date}:00`
+  }
+  leftData.value = [...leftData.value, { id, message, date }]
+  newId.value = ''
+  newMessage.value = ''
+  newDate.value = ''
+}
+
 function onLeftSelect(_e: Event, row: { original: TableRow }) {
   const item = row.original
   leftData.value = leftData.value.filter((r) => r.id !== item.id)
@@ -32,7 +52,33 @@ function onRightSelect(_e: Event, row: { original: TableRow }) {
 <template>
   <UApp>
     <div class="flex h-screen w-full gap-4 p-4">
-      <div class="flex flex-1 flex-col rounded-lg border border-default bg-default p-4">
+      <div class="flex flex-1 flex-col gap-4 rounded-lg border border-default bg-default p-4">
+        <div class="rounded-lg border border-accented bg-elevated/50 p-3">
+          <p class="mb-3 text-sm font-medium text-muted">Новая запись</p>
+          <div class="flex flex-wrap items-end gap-2">
+            <UFormField label="ID" class="min-w-0 flex-1 basis-20">
+              <UInput v-model="newId" placeholder="ID" size="sm" />
+            </UFormField>
+            <UFormField label="Сообщение" class="min-w-0 flex-1 basis-40">
+              <UInput v-model="newMessage" placeholder="Сообщение" size="sm" />
+            </UFormField>
+            <UFormField label="Дата" class="min-w-0 flex-1 basis-44">
+              <UInput
+                v-model="newDate"
+                type="datetime-local"
+                placeholder="Дата"
+                size="sm"
+              />
+            </UFormField>
+            <UButton
+              label="Добавить"
+              size="sm"
+              icon="i-lucide-plus"
+              :disabled="!newId.trim() || !newMessage.trim()"
+              @click="addLeftRecord"
+            />
+          </div>
+        </div>
         <DataTable
           :data="leftData"
           title="Исходная таблица"
