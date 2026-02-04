@@ -218,17 +218,31 @@ function onSelect(e: Event, row: { original: TableRow }) {
         @update:model-value="syncIdFilter"
       />
     </div>
-    <UTable
-      ref="tableRef"
-      v-model:global-filter="globalFilter"
-      v-model:sorting="sorting"
-      v-model:column-filters="columnFilters"
-      :data="draggable ? currentViewRef : data"
-      :columns="sortableColumns"
-      :sorting-options="draggable ? { manualSorting: true } : undefined"
-      :ui="draggable ? { tbody: 'data-table-sortable-tbody' } : undefined"
-      class="flex-1 cursor-pointer"
-      @select="onSelect"
-    />
+    <div class="data-table-scroll min-h-0 max-h-[960px] flex-1 overflow-y-auto">
+      <UTable
+        ref="tableRef"
+        v-model:global-filter="globalFilter"
+        v-model:sorting="sorting"
+        v-model:column-filters="columnFilters"
+        :data="draggable ? currentViewRef : data"
+        :columns="sortableColumns"
+        :sorting-options="draggable ? { manualSorting: true } : undefined"
+        :ui="draggable ? { tbody: 'data-table-sortable-tbody' } : undefined"
+        sticky
+        class="cursor-pointer"
+        @select="onSelect"
+      />
+    </div>
   </div>
 </template>
+
+<style scoped>
+.data-table-scroll :deep(tbody tr) {
+  height: 45px;
+}
+
+.data-table-scroll :deep(tbody tr td) {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+</style>
