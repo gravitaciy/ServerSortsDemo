@@ -10,12 +10,22 @@ dotenv.config()
 
 const app = express()
 const PORT = parseInt(process.env.PORT ?? '', 10) || 3001
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
+const FRONTEND_ORIGINS = (
+  process.env.FRONTEND_ORIGIN
+    ? process.env.FRONTEND_ORIGIN.split(',').map((s) => s.trim())
+    : ['http://localhost:5173', 'http://127.0.0.1:5173']
+).filter(Boolean)
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me'
 
 app.use(
   cors({
-    origin: FRONTEND_ORIGIN,
+    origin: (origin, cb) => {
+      if (origin === undefined || FRONTEND_ORIGINS.includes(origin)) {
+        cb(null, origin ?? FRONTEND_ORIGINS[0])
+      } else {
+        cb(null, false)
+      }
+    },
     credentials: true,
   })
 )

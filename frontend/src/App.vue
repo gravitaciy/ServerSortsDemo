@@ -1,52 +1,165 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import DataTable from '@/components/DataTable.vue'
 import type { TableRow } from '@/components/DataTable.vue'
+import {
+  getRecords,
+  getSessionState,
+  postSessionState,
+  postAddRecord,
+  flushAddQueueNow,
+} from '@/api/client'
+import type { SessionState } from '@/api/types'
 
-const leftData = ref<TableRow[]>([
-  { id: '1', message: 'First message', date: '2024-01-15T10:00:00' },
-  { id: '2', message: 'Second message', date: '2024-02-20T14:30:00' },
-  { id: '3', message: 'Third message', date: '2024-03-10T09:15:00' },
-  { id: '4', message: 'Fourth message', date: '2024-04-05T16:45:00' },
-  { id: '5', message: 'Fifth message', date: '2024-05-12T11:20:00' },
-  { id: '6', message: 'Sixth message', date: '2024-06-01T08:00:00' },
-  { id: '7', message: 'Seventh message', date: '2024-07-18T13:00:00' },
-  { id: '8', message: 'Eighth message', date: '2024-08-22T17:30:00' },
-])
-
+const leftData = ref<TableRow[]>([])
 const rightData = ref<TableRow[]>([])
-
+const sessionState = ref<SessionState>({
+  selectedIds: [],
+  sorting: [],
+  selectedRows: [],
+})
+const leftPage = ref(1)
+const leftTotalPages = ref(1)
+const leftLoading = ref(false)
+const leftIdFilter = ref('')
 const newId = ref('')
 const newMessage = ref('')
 const newDate = ref('')
+
+function onLeftIdFilterChange(value: string) {
+  leftIdFilter.value = value
+  leftPage.value = 1
+  loadInitialLeftData()
+}
+
+function loadSession() {
+  return getSessionState().then((state) => {
+    sessionState.value = {
+      selectedIds: state.selectedIds ?? [],
+      sorting: state.sorting ?? [],
+      selectedRows: state.selectedRows ?? [],
+    }
+    rightData.value = sessionState.value.selectedRows ?? []
+  })
+}
+
+function loadLeftPage(page: number, append: boolean) {
+  if (leftLoading.value) return
+  leftLoading.value = true
+  getRecords({
+    page,
+    limit: 20,
+    idFilter: leftIdFilter.value.trim() || undefined,
+    excludeIds: sessionState.value.selectedIds.length ? sessionState.value.selectedIds : undefined,
+  })
+    .then((res) => {
+      if (append) {
+        leftData.value = [...leftData.value, ...res.data]
+      } else {
+        leftData.value = res.data
+      }
+      leftPage.value = res.page
+      leftTotalPages.value = res.totalPages
+    })
+    .finally(() => {
+      leftLoading.value = false
+    })
+}
+
+function loadInitialLeftData() {
+  if (leftLoading.value) return
+  leftLoading.value = true
+  const params = {
+    limit: 20,
+    idFilter: leftIdFilter.value.trim() || undefined,
+    excludeIds: sessionState.value.selectedIds.length ? sessionState.value.selectedIds : undefined,
+  }
+  Promise.all([getRecords({ ...params, page: 1 }), getRecords({ ...params, page: 2 })])
+    .then(([r1, r2]) => {
+      leftData.value = [...r1.data, ...r2.data]
+      leftPage.value = 2
+      leftTotalPages.value = r1.totalPages
+    })
+    .finally(() => {
+      leftLoading.value = false
+    })
+}
+
+function onLeftLoadMore() {
+  if (leftLoading.value || leftPage.value >= leftTotalPages.value) return
+  loadLeftPage(leftPage.value + 1, true)
+}
+
+function applySessionUpdate(update: Partial<SessionState>) {
+  sessionState.value = { ...sessionState.value, ...update }
+  if (update.selectedRows) rightData.value = update.selectedRows
+  postSessionState({
+    selectedIds: sessionState.value.selectedIds,
+    sorting: sessionState.value.sorting,
+    selectedRows: sessionState.value.selectedRows,
+  })
+}
+
+function onLeftSelect(_e: Event, row: { original: TableRow }) {
+  const item = row.original
+  const selectedIds = [...sessionState.value.selectedIds, item.id]
+  const selectedRows = [...(sessionState.value.selectedRows ?? []), item]
+  applySessionUpdate({ selectedIds, selectedRows })
+  leftData.value = leftData.value.filter((r) => r.id !== item.id)
+}
+
+function onRightSelect(_e: Event, row: { original: TableRow }) {
+  const item = row.original
+  const selectedIds = sessionState.value.selectedIds.filter((id) => id !== item.id)
+  const selectedRows = (sessionState.value.selectedRows ?? []).filter((r) => r.id !== item.id)
+  applySessionUpdate({ selectedIds, selectedRows })
+}
+
+function onRightUpdateData(value: TableRow[]) {
+  applySessionUpdate({
+    selectedIds: value.map((r) => r.id),
+    selectedRows: value,
+  })
+}
 
 function addLeftRecord() {
   const id = newId.value.trim()
   const message = newMessage.value.trim()
   let date = newDate.value.trim()
-  if (!id || !message) return
+  if (!message) return
   if (!date) {
     date = new Date().toISOString().slice(0, 19)
   } else if (date.length === 16) {
     date = `${date}:00`
   }
-  leftData.value = [...leftData.value, { id, message, date }]
+  postAddRecord({
+    ...(id ? { id } : {}),
+    message,
+    date,
+  })
   newId.value = ''
   newMessage.value = ''
   newDate.value = ''
+  flushAddQueueNow().then(() => {
+    leftPage.value = 1
+    loadLeftPage(1, false)
+  })
 }
 
-function onLeftSelect(_e: Event, row: { original: TableRow }) {
-  const item = row.original
-  leftData.value = leftData.value.filter((r) => r.id !== item.id)
-  rightData.value = [...rightData.value, { ...item }]
-}
+watch(
+  () => sessionState.value.selectedIds,
+  () => {
+    leftPage.value = 1
+    loadInitialLeftData()
+  },
+  { deep: true }
+)
 
-function onRightSelect(_e: Event, row: { original: TableRow }) {
-  const item = row.original
-  rightData.value = rightData.value.filter((r) => r.id !== item.id)
-  leftData.value = [...leftData.value, { ...item }]
-}
+onMounted(() => {
+  loadSession().then(() => {
+    loadInitialLeftData()
+  })
+})
 </script>
 
 <template>
@@ -57,7 +170,7 @@ function onRightSelect(_e: Event, row: { original: TableRow }) {
           <p class="mb-3 text-sm font-medium text-muted">Новая запись</p>
           <div class="flex flex-wrap items-end gap-2">
             <UFormField label="ID" class="min-w-0 flex-1 basis-20">
-              <UInput v-model="newId" placeholder="ID" size="sm" />
+              <UInput v-model="newId" placeholder="ID (необязательно)" size="sm" />
             </UFormField>
             <UFormField label="Сообщение" class="min-w-0 flex-1 basis-40">
               <UInput v-model="newMessage" placeholder="Сообщение" size="sm" />
@@ -74,7 +187,7 @@ function onRightSelect(_e: Event, row: { original: TableRow }) {
               label="Добавить"
               size="sm"
               icon="i-lucide-plus"
-              :disabled="!newId.trim() || !newMessage.trim()"
+              :disabled="!newMessage.trim()"
               @click="addLeftRecord"
             />
           </div>
@@ -82,15 +195,19 @@ function onRightSelect(_e: Event, row: { original: TableRow }) {
         <DataTable
           :data="leftData"
           title="Исходная таблица"
+          :infinite-scroll="true"
           @select="onLeftSelect"
+          @load-more="onLeftLoadMore"
+          @update:id-filter="onLeftIdFilterChange"
         />
       </div>
       <div class="flex flex-1 flex-col rounded-lg border border-default bg-default p-4">
         <DataTable
-          v-model:data="rightData"
+          :data="rightData"
           title="Перенесённые строки"
           draggable
           @select="onRightSelect"
+          @update:data="onRightUpdateData"
         />
       </div>
     </div>

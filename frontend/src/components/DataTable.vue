@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, ref, resolveComponent, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, resolveComponent, watch } from 'vue'
 import { useSortable } from '@vueuse/integrations/useSortable'
 import type { TableColumn } from '@nuxt/ui'
 
@@ -13,11 +13,14 @@ const props = defineProps<{
   data: TableRow[]
   title?: string
   draggable?: boolean
+  infiniteScroll?: boolean
 }>()
 
 const emit = defineEmits<{
   select: [event: Event, row: { original: TableRow }]
   'update:data': [value: TableRow[]]
+  'update:idFilter': [value: string]
+  loadMore: []
 }>()
 
 const displayOrder = ref<string[]>([])
@@ -123,9 +126,10 @@ if (props.draggable) {
 onMounted(() => {
   if (props.draggable) {
     nextTick(() => {
-      useSortable('.data-table-sortable-tbody', currentViewRef, {
-        animation: 150,
-      })
+      const el = scrollContainerRef.value?.querySelector('.data-table-sortable-tbody')
+      if (el) {
+        useSortable(el as HTMLElement, currentViewRef, { animation: 150 } as unknown as Parameters<typeof useSortable>[2])
+      }
     })
   }
 })
@@ -135,6 +139,43 @@ const tableRef = ref<{
     getColumn: (id: string) => { setFilterValue: (v: string) => void; getFilterValue: () => string }
   }
 } | null>(null)
+const scrollContainerRef = ref<HTMLElement | null>(null)
+
+const ROW_HEIGHT_PX = 45
+const PAGE_SIZE = 20
+let lastEmittedScrollThreshold = 0
+let scrollListener: (() => void) | null = null
+
+function checkLoadMore() {
+  if (!props.infiniteScroll || props.data.length < PAGE_SIZE) return
+  const el = scrollContainerRef.value
+  if (!el) return
+  const pagesWeHave = Math.floor(props.data.length / PAGE_SIZE)
+  if (pagesWeHave < 1) return
+  const threshold = (pagesWeHave - 1) * PAGE_SIZE * ROW_HEIGHT_PX
+  if (threshold <= 0) return
+  const { scrollTop } = el
+  if (scrollTop >= threshold && threshold > lastEmittedScrollThreshold) {
+    lastEmittedScrollThreshold = threshold
+    emit('loadMore')
+  }
+}
+
+onMounted(() => {
+  if (!props.infiniteScroll) return
+  nextTick(() => {
+    const el = scrollContainerRef.value
+    if (!el) return
+    scrollListener = () => checkLoadMore()
+    el.addEventListener('scroll', scrollListener, { passive: true })
+  })
+})
+
+onBeforeUnmount(() => {
+  const el = scrollContainerRef.value
+  if (el && scrollListener) el.removeEventListener('scroll', scrollListener)
+  scrollListener = null
+})
 
 const globalFilter = ref('')
 const idFilter = ref('')
@@ -194,6 +235,7 @@ const sortableColumns: TableColumn<TableRow>[] = [
 function syncIdFilter(value: string) {
   idFilter.value = value
   tableRef.value?.tableApi?.getColumn('id')?.setFilterValue(value)
+  emit('update:idFilter', value)
 }
 
 function onSelect(e: Event, row: { original: TableRow }) {
@@ -218,7 +260,7 @@ function onSelect(e: Event, row: { original: TableRow }) {
         @update:model-value="syncIdFilter"
       />
     </div>
-    <div class="data-table-scroll min-h-0 max-h-[960px] flex-1 overflow-y-auto">
+    <div ref="scrollContainerRef" class="data-table-scroll min-h-0 max-h-[960px] flex-1 overflow-y-auto">
       <UTable
         ref="tableRef"
         v-model:global-filter="globalFilter"

@@ -14,6 +14,19 @@ function toTableRow(row: MessageRow): TableRow {
   }
 }
 
+function parseExcludeIds(query: unknown): number[] | null {
+  if (query == null) return null
+  if (Array.isArray(query)) {
+    return query.map((v) => parseInt(String(v), 10)).filter((n) => Number.isInteger(n) && n >= 1)
+  }
+  const s = String(query).trim()
+  if (!s) return null
+  return s
+    .split(',')
+    .map((v) => parseInt(v.trim(), 10))
+    .filter((n) => Number.isInteger(n) && n >= 1)
+}
+
 router.get('/records', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = Math.max(1, parseInt(String(req.query.page), 10) || 1)
@@ -21,9 +34,20 @@ router.get('/records', async (req: Request, res: Response, next: NextFunction) =
     const limit = Math.min(MAX_LIMIT, Math.max(1, limitRaw))
     const offset = (page - 1) * limit
     const idFilter = req.query.idFilter != null ? String(req.query.idFilter).trim() : null
+    const excludeIds = parseExcludeIds(req.query.excludeIds)
 
-    const whereClause = idFilter ? ' WHERE id = ?' : ''
-    const countParams = idFilter ? [idFilter] : []
+    const conditions: string[] = []
+    const countParams: (string | number)[] = []
+    if (idFilter) {
+      conditions.push('id = ?')
+      countParams.push(idFilter)
+    }
+    if (excludeIds && excludeIds.length > 0) {
+      conditions.push(`id NOT IN (${excludeIds.map(() => '?').join(',')})`)
+      countParams.push(...excludeIds)
+    }
+    const whereClause = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : ''
+
     const totalRow = await get<{ count: number }>(
       `SELECT COUNT(*) AS count FROM messages${whereClause}`,
       countParams
