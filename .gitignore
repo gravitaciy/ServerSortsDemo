@@ -1,6 +1,8 @@
 .idea
 node_modules
 package-lock.json
+backend/data/app.db
 # Auto-generated type declarations
 auto-imports.d.ts
 components.d.ts
+dist/

@@ -1,0 +1,57 @@
+import express from 'express'
+import cors from 'cors'
+import session from 'express-session'
+import dotenv from 'dotenv'
+import { initDb } from './db'
+import recordsRouter from './routes/records'
+import sessionRouter from './routes/session'
+
+dotenv.config()
+
+const app = express()
+const PORT = parseInt(process.env.PORT ?? '', 10) || 3001
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
+const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me'
+
+app.use(
+  cors({
+    origin: FRONTEND_ORIGIN,
+    credentials: true,
+  })
+)
+app.use(express.json())
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    },
+  })
+)
+
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok' })
+})
+
+app.use('/api', recordsRouter)
+app.use('/api', sessionRouter)
+
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('Server error:', err)
+  res.status(500).json({ error: 'Internal Server Error' })
+})
+
+initDb()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Backend listening on http://localhost:${PORT}`)
+    })
+  })
+  .catch((err) => {
+    console.error('Failed to initialize database:', err)
+    process.exit(1)
+  })
