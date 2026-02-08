@@ -1,3 +1,4 @@
+import path from 'path'
 import express from 'express'
 import cors from 'cors'
 import session from 'express-session'
@@ -9,6 +10,7 @@ import sessionRouter from './routes/session'
 dotenv.config()
 
 const app = express()
+const isProduction = process.env.NODE_ENV === 'production'
 const PORT = parseInt(process.env.PORT ?? '', 10) || 3001
 const FRONTEND_ORIGINS = (
   process.env.FRONTEND_ORIGIN
@@ -38,7 +40,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: isProduction,
     },
   })
 )
@@ -49,6 +51,18 @@ app.get('/health', (_req, res) => {
 
 app.use('/api', recordsRouter)
 app.use('/api', sessionRouter)
+
+if (isProduction) {
+  const staticDir =
+    process.env.STATIC_DIR ?? path.join(__dirname, '..', '..', 'frontend', 'dist')
+  app.use(express.static(staticDir))
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next()
+    res.sendFile(path.join(staticDir, 'index.html'), (err) => {
+      if (err) next(err)
+    })
+  })
+}
 
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Server error:', err)
